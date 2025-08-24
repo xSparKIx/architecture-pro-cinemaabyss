@@ -1,0 +1,127 @@
+@startuml Cinema container diagram
+
+title Диаграмма контейнеров онлайн-кинотеата
+
+top to bottom direction
+
+!include ../templates/C4_Container.puml
+
+' Внешние сущности
+
+Person(User, "Пользователь", "Пользователь онлайн кинотеатра")
+
+Container_Ext(OtherServices, "Другие источники")
+Container_Ext(RecomendationsSevice, "Внешняя рекомендательная система")
+
+ContainerDb_Ext(OpenSources, "Открытые источники", "S3")
+
+System_Boundary(Cinema, "Онлайн кинотеатр") {
+    ' Контейнеры
+    Container(MobilesClient, "Мобильные устройства")
+    Container(ComputerClient, "PC")
+    Container(TVClient, "Смарт ТВ")
+
+    ' BFF
+    Container(MobilesBFF, "BFF мобильных устройств")
+    Container(ComputerBFF, "BFF PC")
+    Container(TVBFF, "BFF смарт ТВ")
+
+    ' Сервисы
+    System_Boundary(UsersService, "Управление пользователями") {
+        Container(UsersContainer, "Администрирование пользователей")
+        ContainerDb(UsersDb, "База данных", "PostgreSQL", "Хранит информацию о пользователях")
+        ContainerDb(UsersSessionsDb, "База данных", "Redis", "Хранит информацию о сессиях пользователей")
+    }
+    ' @TODO скорее всего должна быть связана с сервисом подписок
+    System_Boundary(PaymentsService, "Управление платежами") {
+        Container(PaymentsContainer, "Оформление подписок")
+        Container(PaymentsMonitoring, "Аналитика и отчетность по платежам")
+        ContainerDb(PaymentsDb, "База данных", "PostgreSQL", "Хранит информацию о платежах пользователей")
+    }
+    System_Boundary(CatalogService, "Управление каталогом")
+    System_Boundary(SubscribesService, "Управление подписками") {
+        Container(SubscribesContainer, "Администрирование подписок")
+        ContainerDb(SubscribesDb, "База данных", "PostgreSQL", "Хранит информацию о подписках пользователей")
+    }
+    System_Boundary(SalesService, "Управление скидками")
+    System_Boundary(MetadataService, "Управление метаданными") {
+        Container(FilmsContainer, "Администрирование фильмов")
+        Container(ActorsContainer, "Администрирование актеров")
+        Container(RaitingContainer, "Администрирование рейтинга")
+        Container(FolderContainer, "Администрирование папок")
+        ContainerDb(MetadataDb, "База данных", "PostgreSQL", "Хранит метаданные о фильмах/актерах/папках итд.")
+    }
+    ' Используем для взаимодействия с внешними сервисами и другими видео
+    System_Boundary(VideoService, "Управление видео") {
+        Container(VideoContainer, "Администрирование видео")
+    }
+}
+
+'
+' Потоки данных
+'
+
+' Связи клиента
+Rel(User, MobilesClient, "Использует для взаимодействия с кинотеатром")
+Rel(User, ComputerClient, "Использует для взаимодействия с кинотеатром")
+Rel(User, TVClient, "Использует для взаимодействия с кинотеатром")
+
+' Связи BFF
+Rel(MobilesClient, MobilesBFF, "Запросы взаимодействия с онлайн-кинотеатром")
+Rel(MobilesBFF, FolderContainer, "Запросы на формирование папок")
+' @TODO Вот тут формированием рейтинга фильмов будет заниматься каталог скорее всего и просто обращаться к этому контейнеру
+Rel(MobilesBFF, RaitingContainer, "Запросы управления рейтингом")
+Rel(MobilesBFF, ActorsContainer, "Запросы управления актерами")
+Rel(MobilesBFF, FilmsContainer, "Запросы управления фильмами")
+Rel(MobilesBFF, SubscribesContainer, "Запросы управления подписками")
+Rel(MobilesBFF, PaymentsMonitoring, "Запросы получения истории платежей")
+
+Rel(ComputerClient, ComputerBFF, "Запросы взаимодействия с онлайн-кинотеатром")
+Rel(ComputerBFF, FolderContainer, "Запросы на формирование папок")
+' @TODO Вот тут формированием рейтинга фильмов будет заниматься каталог скорее всего и просто обращаться к этому контейнеру
+Rel(ComputerBFF, RaitingContainer, "Запросы управления рейтингом")
+Rel(ComputerBFF, ActorsContainer, "Запросы управления актерами")
+Rel(ComputerBFF, FilmsContainer, "Запросы управления фильмами")
+Rel(ComputerBFF, SubscribesContainer, "Запросы управления подписками")
+Rel(ComputerBFF, PaymentsMonitoring, "Запросы получения истории платежей")
+
+Rel(TVClient, TVBFF, "Запросы взаимодействия с онлайн-кинотеатром")
+Rel(TVBFF, FolderContainer, "Запросы на формирование папок")
+' @TODO Вот тут формированием рейтинга фильмов будет заниматься каталог скорее всего и просто обращаться к этому контейнеру
+Rel(TVBFF, RaitingContainer, "Запросы управления рейтингом")
+Rel(TVBFF, ActorsContainer, "Запросы управления актерами")
+Rel(TVBFF, FilmsContainer, "Запросы управления фильмами")
+Rel(TVBFF, SubscribesContainer, "Запросы управления подписками")
+Rel(TVBFF, PaymentsMonitoring, "Запросы получения истории платежей")
+
+' Связи системы управления пользователями
+Rel(MobilesBFF, UsersContainer, "Запросы управления пользователями/авторизация/аутентификация")
+Rel(ComputerBFF, UsersContainer, "Запросы управления пользователями/авторизация/аутентификация")
+Rel(TVBFF, UsersContainer, "Запросы управления пользователями/авторизация/аутентификация")
+
+' Связи системы управления метаданными
+Rel(FilmsContainer, MetadataDb, "Данные о фильма с ссылкой на видео")
+Rel(ActorsContainer, MetadataDb, "Данные об атктерах")
+Rel(RaitingContainer, MetadataDb, "Данные о рейтингах и оценках фильмах")
+Rel(FolderContainer, MetadataDb, "Данные о папках")
+
+' Связи сервиса управления видео
+Rel(VideoContainer, OtherServices, "Получение видеозаписей")
+Rel(VideoContainer, OpenSources, "Получение видеозаписей")
+
+' Связи сервиса управления подписками
+Rel(SubscribesContainer, SubscribesDb, "Данные о подписках пользователей")
+Rel(SubscribesContainer, PaymentsContainer, "Запрос на оплату подписки")
+
+' Связи сервиса управления пользователями
+Rel(UsersContainer, UsersDb, "Данные о пользователях")
+Rel(UsersContainer, UsersSessionsDb, "Данные о сессиях пользователей")
+' Выступает как RLS, проверяет какие фильмы еще доступны пользователю
+Rel(UsersContainer, SubscribesContainer, "Получает информацию о подписках пользователей")
+
+' Связи сервиса управления платежами
+Rel(PaymentsContainer, PaymentsDb, "Данные о платежах пользователей")
+' Возможно вынести в отдельный сервис мониторинга
+Rel(PaymentsMonitoring, PaymentsDb, "Данные для построения истории о платежах")
+
+@enduml
