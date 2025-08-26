@@ -9,6 +9,7 @@ top to bottom direction
 ' Внешние сущности
 
 Person(User, "Пользователь", "Пользователь онлайн кинотеатра")
+Person(SalesTeam, "Команда продажи", "Команда по продажам и маркетингу")
 
 Container_Ext(OtherServices, "Другие источники")
 Container_Ext(RecomendationsSevice, "Внешняя рекомендательная система")
@@ -21,10 +22,16 @@ System_Boundary(Cinema, "Онлайн кинотеатр") {
     Container(ComputerClient, "PC")
     Container(TVClient, "Смарт ТВ")
 
+    ' Api Gateway
+    Container(ApiGateway, "ApiGateway")
+
     ' BFF
     Container(MobilesBFF, "BFF мобильных устройств")
     Container(ComputerBFF, "BFF PC")
     Container(TVBFF, "BFF смарт ТВ")
+
+    ' Очередь
+    ContainerQueue_Ext(Queue, "Очередь сообщений", "Kafka")
 
     ' Сервисы
     System_Boundary(UsersService, "Управление пользователями") {
@@ -32,28 +39,33 @@ System_Boundary(Cinema, "Онлайн кинотеатр") {
         ContainerDb(UsersDb, "База данных", "PostgreSQL", "Хранит информацию о пользователях")
         ContainerDb(UsersSessionsDb, "База данных", "Redis", "Хранит информацию о сессиях пользователей")
     }
-    ' @TODO скорее всего должна быть связана с сервисом подписок
     System_Boundary(PaymentsService, "Управление платежами") {
         Container(PaymentsContainer, "Оформление подписок")
         Container(PaymentsMonitoring, "Аналитика и отчетность по платежам")
         ContainerDb(PaymentsDb, "База данных", "PostgreSQL", "Хранит информацию о платежах пользователей")
     }
-    System_Boundary(CatalogService, "Управление каталогом")
     System_Boundary(SubscribesService, "Управление подписками") {
         Container(SubscribesContainer, "Администрирование подписок")
         ContainerDb(SubscribesDb, "База данных", "PostgreSQL", "Хранит информацию о подписках пользователей")
     }
-    System_Boundary(SalesService, "Управление скидками")
+    System_Boundary(SalesService, "Управление скидками") {
+        Container(SalesContainer, "Администрирование скидочных программ")
+        Container(SalesMonitoring, "Аналитика и мониторинг скидочных программ")
+        ContainerDb(SalesDb, "База данных", "PostgreSQL", "Хранит данные о скидочных программах")
+    }
     System_Boundary(MetadataService, "Управление метаданными") {
         Container(FilmsContainer, "Администрирование фильмов")
         Container(ActorsContainer, "Администрирование актеров")
         Container(RaitingContainer, "Администрирование рейтинга")
         Container(FolderContainer, "Администрирование папок")
+        Container(RecomendationsContainer, "Администрирование рекомендаций")
         ContainerDb(MetadataDb, "База данных", "PostgreSQL", "Хранит метаданные о фильмах/актерах/папках итд.")
+        ContainerDb(MetadataNonRelationalDb, "База данных", "Apache Cassandra", "Хранит информацию об оценках, рейтинге, ")
     }
     ' Используем для взаимодействия с внешними сервисами и другими видео
-    System_Boundary(VideoService, "Управление видео") {
-        Container(VideoContainer, "Администрирование видео")
+    ' @todo Тут возможно добавить CDN
+    System_Boundary(VideoService, "Управление стримами") {
+        Container(VideoContainer, "Получение и подготовка видео")
     }
 }
 
@@ -61,67 +73,76 @@ System_Boundary(Cinema, "Онлайн кинотеатр") {
 ' Потоки данных
 '
 
-' Связи клиента
+' Связи пользователей
 Rel(User, MobilesClient, "Использует для взаимодействия с кинотеатром")
 Rel(User, ComputerClient, "Использует для взаимодействия с кинотеатром")
 Rel(User, TVClient, "Использует для взаимодействия с кинотеатром")
+Rel(SalesTeam, MobilesClient, "Использует для взаимодействия с кинотеатром")
+Rel(SalesTeam, ComputerClient, "Использует для взаимодействия с кинотеатром")
+Rel(SalesTeam, TVClient, "Использует для взаимодействия с кинотеатром")
 
 ' Связи BFF
 Rel(MobilesClient, MobilesBFF, "Запросы взаимодействия с онлайн-кинотеатром")
-Rel(MobilesBFF, FolderContainer, "Запросы на формирование папок")
-' @TODO Вот тут формированием рейтинга фильмов будет заниматься каталог скорее всего и просто обращаться к этому контейнеру
-Rel(MobilesBFF, RaitingContainer, "Запросы управления рейтингом")
-Rel(MobilesBFF, ActorsContainer, "Запросы управления актерами")
-Rel(MobilesBFF, FilmsContainer, "Запросы управления фильмами")
-Rel(MobilesBFF, SubscribesContainer, "Запросы управления подписками")
-Rel(MobilesBFF, PaymentsMonitoring, "Запросы получения истории платежей")
+Rel(MobilesBFF, ApiGateway, "Запросы взаимодействия с онлайн-кинотеатром")
+Rel(MobilesClient, VideoContainer, "Получает видео-сегменты (HLS/DASH)", "hls")
 
 Rel(ComputerClient, ComputerBFF, "Запросы взаимодействия с онлайн-кинотеатром")
-Rel(ComputerBFF, FolderContainer, "Запросы на формирование папок")
-' @TODO Вот тут формированием рейтинга фильмов будет заниматься каталог скорее всего и просто обращаться к этому контейнеру
-Rel(ComputerBFF, RaitingContainer, "Запросы управления рейтингом")
-Rel(ComputerBFF, ActorsContainer, "Запросы управления актерами")
-Rel(ComputerBFF, FilmsContainer, "Запросы управления фильмами")
-Rel(ComputerBFF, SubscribesContainer, "Запросы управления подписками")
-Rel(ComputerBFF, PaymentsMonitoring, "Запросы получения истории платежей")
+Rel(ComputerBFF, ApiGateway, "Запросы взаимодействия с онлайн-кинотеатром")
+Rel(ComputerClient, VideoContainer, "Получает видео-сегменты (HLS/DASH)", "hls")
 
 Rel(TVClient, TVBFF, "Запросы взаимодействия с онлайн-кинотеатром")
-Rel(TVBFF, FolderContainer, "Запросы на формирование папок")
-' @TODO Вот тут формированием рейтинга фильмов будет заниматься каталог скорее всего и просто обращаться к этому контейнеру
-Rel(TVBFF, RaitingContainer, "Запросы управления рейтингом")
-Rel(TVBFF, ActorsContainer, "Запросы управления актерами")
-Rel(TVBFF, FilmsContainer, "Запросы управления фильмами")
-Rel(TVBFF, SubscribesContainer, "Запросы управления подписками")
-Rel(TVBFF, PaymentsMonitoring, "Запросы получения истории платежей")
-
-' Связи системы управления пользователями
-Rel(MobilesBFF, UsersContainer, "Запросы управления пользователями/авторизация/аутентификация")
-Rel(ComputerBFF, UsersContainer, "Запросы управления пользователями/авторизация/аутентификация")
-Rel(TVBFF, UsersContainer, "Запросы управления пользователями/авторизация/аутентификация")
+Rel(TVBFF, ApiGateway, "Запросы взаимодействия с онлайн-кинотеатром")
+Rel(TVClient, VideoContainer, "Получает видео-сегменты (HLS/DASH)", "hls")
 
 ' Связи системы управления метаданными
 Rel(FilmsContainer, MetadataDb, "Данные о фильма с ссылкой на видео")
 Rel(ActorsContainer, MetadataDb, "Данные об атктерах")
-Rel(RaitingContainer, MetadataDb, "Данные о рейтингах и оценках фильмах")
-Rel(FolderContainer, MetadataDb, "Данные о папках")
+Rel(RaitingContainer, MetadataNonRelationalDb, "Данные о рейтингах и оценках фильмах")
+Rel(FolderContainer, MetadataNonRelationalDb, "Данные о папках")
+Rel(RecomendationsContainer, MetadataNonRelationalDb, "Данные о списке рекомендаций для пользователя")
+Rel(FilmsContainer, Queue, "Данные об изменении скидочных программ")
+Rel(RecomendationsContainer, Queue, "Данные о списке рекомендаций для пользователя")
 
 ' Связи сервиса управления видео
-Rel(VideoContainer, OtherServices, "Получение видеозаписей")
-Rel(VideoContainer, OpenSources, "Получение видеозаписей")
+Rel(VideoContainer, OtherServices, "Запросы получения видео-сегментов")
+Rel(VideoContainer, OpenSources, "Запросы получения видео-сегментов")
+Rel(VideoContainer, Queue, "Сообщения о начале/окончании просмотра")
 
 ' Связи сервиса управления подписками
 Rel(SubscribesContainer, SubscribesDb, "Данные о подписках пользователей")
-Rel(SubscribesContainer, PaymentsContainer, "Запрос на оплату подписки")
+Rel(SubscribesContainer, Queue, "Получает сообщения об оформлении/окончании подписки")
 
 ' Связи сервиса управления пользователями
 Rel(UsersContainer, UsersDb, "Данные о пользователях")
 Rel(UsersContainer, UsersSessionsDb, "Данные о сессиях пользователей")
-' Выступает как RLS, проверяет какие фильмы еще доступны пользователю
-Rel(UsersContainer, SubscribesContainer, "Получает информацию о подписках пользователей")
+Rel(UsersContainer, Queue, "Сообщение о входе/выходе пользователя")
 
 ' Связи сервиса управления платежами
 Rel(PaymentsContainer, PaymentsDb, "Данные о платежах пользователей")
-' Возможно вынести в отдельный сервис мониторинга
+Rel(PaymentsContainer, Queue, "Сообщение о статусе оплаты")
 Rel(PaymentsMonitoring, PaymentsDb, "Данные для построения истории о платежах")
+
+' Связи сервиса скидок
+Rel(SalesContainer, SalesDb, "Запросы управления скидочными программами")
+Rel(SalesMonitoring, SalesDb, "Запросы на получение информации о скидочных программах")
+Rel(SalesContainer, Queue, "Сообщения об запуске/отмене скидочных прогамм")
+Rel(SalesMonitoring, Queue, "Данные для аналитики и мониторинга скидочных программ в режиме реального времени")
+
+' Связи Api Gateway
+Rel(ApiGateway, UsersContainer, "Запросы управления пользователями/авторизация/аутентификация")
+Rel(ApiGateway, FolderContainer, "Запросы на формирование папок")
+Rel(ApiGateway, RaitingContainer, "Запросы управления рейтингом")
+Rel(ApiGateway, ActorsContainer, "Запросы управления актерами")
+Rel(ApiGateway, FilmsContainer, "Запросы управления фильмами")
+Rel(ApiGateway, SubscribesContainer, "Запросы управления подписками")
+Rel(ApiGateway, PaymentsMonitoring, "Запросы получения истории платежей")
+Rel(ApiGateway, PaymentsContainer, "Запросы оплаты подписки")
+Rel(ApiGateway, VideoContainer, "Запросы просмотра фильмов")
+Rel(ApiGateway, SalesContainer, "Запросы получения информации о скидочных программах")
+Rel(ApiGateway, SalesMonitoring, "Запросы построения аналитик/отчетов по скидочным программам")
+Rel(ApiGateway, RecomendationsContainer, "Запросы на получение списка рекомендаций")
+
+' Связи рекомендательной системы
+Rel(RecomendationsSevice, Queue, "Сообщения о подготовке списока рекомендаций для пользователя")
 
 @enduml
