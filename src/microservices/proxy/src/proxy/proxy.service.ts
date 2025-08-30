@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { createProxyMiddleware } from "http-proxy-middleware";
+import { FeatureFlagService } from "src/feature-flag/feature-flag.service";
 
 /**
  * Сервис проксирования запросов в зависимости от заданного Feature Flag
@@ -14,12 +15,8 @@ export class ProxyService {
      * Прокси новой системы
      */
     private newSystemProxy;
-    /**
-     * Процент перенаправляемого трафика
-     */
-    private percent: number;
 
-    constructor() {
+    constructor(private readonly featureFlagService: FeatureFlagService) {
         this.oldSystemProxy = createProxyMiddleware({
             target: process.env.MONOLITH_URL,
             changeOrigin: true,
@@ -29,8 +26,15 @@ export class ProxyService {
             target: process.env.MOVIES_SERVICE_URL,
             changeOrigin: true,
         });
+    }
 
-        this.percent = process.env.MOVIES_MIGRATION_PERCENT ? +process.env.MOVIES_MIGRATION_PERCENT : 10;
+    /**
+     * Метод перенаправления запроса на старую версию
+     * @param req 
+     * @param res 
+     */
+    proxyToOldSystem(req: Request, res: Response) {
+        return this.oldSystemProxy(req, res);
     }
 
     /**
@@ -38,15 +42,28 @@ export class ProxyService {
      * @param req 
      * @param res 
      */
-    async handleRequest(req: Request, res: Response) {
-        // @todo Не оптимальный способ надо поправить
-        // @todo Осталось поправить тесты event
-        const useNewSystem = Math.random() < (this.percent * 0.01);
+    handleRequest(req: Request, res: Response) {
+        const userId = this.getUserKey(req);
+        const useNewSystem = this.featureFlagService.isNewSystem(userId);
 
         if (useNewSystem) {
             this.newSystemProxy(req, res);
         } else {
             this.oldSystemProxy(req, res);
         }
+    }
+
+    /**
+     * Метод получения id пользователя
+     * @param req 
+     * @returns 
+     */
+    private getUserKey(req: Request): string {
+        // Приоритеты для идентификации пользователя
+        return (
+            req.headers['x-user-id']?.toString() ||
+            req.headers['authorization']?.toString() ||
+            'anonymous'
+        );
     }
 }
