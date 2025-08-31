@@ -1,0 +1,20 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: monolith-cb
+  namespace: cinemaabyss
+spec:
+  host: monolith.cinemaabyss.svc.cluster.local
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 200
+      http:
+        http1MaxPendingRequests: 20
+        maxRequestsPerConnection: 15
+    outlierDetection:
+      consecutive5xxErrors: 10
+      consecutiveGatewayErrors: 5
+      interval: 60s
+      baseEjectionTime: 60s
+      maxEjectionPercent: 30

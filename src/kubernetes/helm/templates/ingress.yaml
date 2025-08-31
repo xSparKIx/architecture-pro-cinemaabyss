@@ -17,7 +17,7 @@ spec:
   {{- end }}
   rules:
   {{- range .Values.ingress.hosts }}
-  - host: {{ .host }}
+  - host: {{ .host | quote }}
     http:
       paths:
       {{- range .paths }}
@@ -25,9 +25,9 @@ spec:
         pathType: {{ .pathType }}
         backend:
           service:
-            name: {{ .service }}
+            name: {{ .service }}     # ← Изменено с .backend.service.name
             port:
-              number: {{ .port }}
+              number: {{ .port }}    # ← Изменено с .backend.service.port.number
       {{- end }}
   {{- end }}
 {{- end }}
